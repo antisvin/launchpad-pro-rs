@@ -1,0 +1,76 @@
+[tasks.resources]
+script_runner = "python"
+script_extension = "py"
+script = '''
+#!/usr/bin/env python3
+
+import math
+
+notes = []
+rows = []
+
+class Tone(object):
+    def __init__(self, mul, div):
+        self.gcd = math.gcd(mul, div)
+        self.mul = int(mul / self.gcd)
+        self.div = int(div / self.gcd)
+        self.cents = math.log(k / l, 2) * 1200
+        self.limit = max(self.largest_limit(self.mul), self.largest_limit(self.div))
+
+    def semitone(self):
+        return int(self.cents / 100)
+
+    def bend(self):
+        return int((self.cents / 100 - self.semitone()) * (1 << 32))
+
+    def largest_limit(self, n):
+        largest = 1
+
+        if n % 2 == 0:
+            largest = 2
+
+        for i in range(3, n + 1, 2):
+            if n % i == 0:
+                largest = i
+        
+        return largest
+
+    def largest_prime_factor(self, n):
+        largest = None
+
+        for i in range(2, n):
+            while n % i == 0:
+                largest = i
+                n //= i
+
+            if n == 1:
+                return largest
+
+        if n >= 1:
+            return n
+
+for i in range(8, 16):
+    r = []
+    for j in range(8, 16):
+        k = j
+        if j < i:
+            k *= 2
+        l = i
+        r.append(Tone(k, l))
+    rows.append(r)
+
+header = """use super::diamond::Tone;
+
+pub const TONES: [[Tone; 8]; 8] = [
+"""
+
+tone = lambda t: f'Tone {{ limit: {t.limit}, semitones: {t.semitone()}, cents: {hex(t.bend())} }}'
+footer = '];\n'
+
+with open('examples/mpe/resources.rs', 'w') as out:
+    out.write(header)
+    for i, row in enumerate(rows):
+        row_str = ', '.join(tone(t) for t in row)
+        out.write(f'    [{row_str}],\n' if i < len(rows) - 1 else f'    [{row_str}]\n')
+    out.write(footer)
+'''

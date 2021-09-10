@@ -3,7 +3,7 @@
 
 #[cfg(target_arch="arm")]
 use core::panic::PanicInfo;
-
+use wmidi::MidiMessage;
 use launchpad_pro_rs::hal;
 use launchpad_pro_rs::hal::LaunchpadApp;
 use launchpad_pro_rs::launchpad_app;
@@ -18,7 +18,7 @@ launchpad_app!(App);
 impl LaunchpadApp for App {
     fn init_event(&self, _adc: hal::surface::Pads) {}
     fn timer_event(&self) {}
-    fn midi_event(&self, _port: hal::midi::Port, _message: hal::midi::Message) {}
+    fn midi_event(&self, _port: hal::midi::Port, _message: MidiMessage) {}
     fn sysex_event(&self, _port: hal::midi::Port, _data: &[u8]) {}
     fn cable_event(&self, _cable_event: hal::midi::CableEvent) {}
     fn button_event(&self, _button_event: hal::surface::ButtonEvent) {}

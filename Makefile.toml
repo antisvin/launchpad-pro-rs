@@ -8,6 +8,9 @@ OUTPUT = "app"
 [tasks.build]
 command = "cargo"
 args = ["build", "--target", "${LAUNCHPAD_TARGET}"]
+dependencies = [
+    { name = "resources", path = "resources.toml" }
+]
 
 [tasks.build-release]
 command = "cargo"

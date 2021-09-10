@@ -1,6 +1,7 @@
 use core::ops::Add;
-
 pub use spin::Mutex as Mutex;
+use wmidi::MidiMessage;
+use core::convert::TryFrom;
 
 #[cfg(target_arch="arm")]
 extern "C" {
@@ -332,24 +333,13 @@ pub mod surface {
 
 /// Send and receive MIDI messages.
 pub mod midi {
+    pub use wmidi::MidiMessage;
+
     /// The MIDI ports available on the Launchpad Pro.
     pub enum Port {
         Standalone = 0,
         USB = 1,
         DIN = 2,
-    }
-
-    /// A MIDI message.
-    pub struct Message {
-        pub status: u8,
-        pub data: (u8, u8),
-    }
-
-    impl Message {
-        /// Construct a new MIDI message.
-        pub fn new(status: u8, data: (u8, u8)) -> Self {
-            Self {status, data}
-        }
     }
 
     /// The MIDI DIN socket types available.
@@ -369,13 +359,18 @@ pub mod midi {
     /// # Example
     ///
     /// ```
-    /// use launchpad_pro_rs::hal::midi::{send_message, Port, Message};
+    /// use launchpad_pro_rs::hal::midi::{send_message, Port, MidiMessage};
+    /// use std::convert::TryFrom;
     ///
-    /// send_message(Port::DIN, Message::new(0x90, (60, 127)));
+    /// let data = [0x90, 60, 127];
+    /// let msg = MidiMessage::try_from(data.as_ref()).unwrap();    
+    /// send_message(Port::DIN, msg);
     /// ```
-    pub fn send_message(port: Port, message: Message) {
+    pub fn send_message(port: Port, message: MidiMessage) {
+        let mut data: [u8; 3] = [0; 3];
+        let _size = message.copy_to_slice(&mut data).unwrap();
         unsafe {
-            super::hal_send_midi(port as u8, message.status, message.data.0, message.data.1);
+            super::hal_send_midi(port as u8, data[0], data[1], data[2])
         }
     }
 
@@ -408,7 +403,7 @@ pub trait LaunchpadApp: Sync {
     /// A 1 kHz (1 millisecond) timer.
     fn timer_event(&self) {}
     /// Called when a MIDI message is received from USB or DIN.
-    fn midi_event(&self, _port: midi::Port, _midi_event: midi::Message) {}
+    fn midi_event(&self, _port: midi::Port, _midi_event: MidiMessage) {}
     /// Called when a SysEx message is received from USB or DIN.
     fn sysex_event(&self, _port: midi::Port, _data: &[u8]) {}
     /// Called when a MIDI DIN cable is connected or disconnected.
@@ -430,7 +425,7 @@ pub trait LaunchpadApp: Sync {
 /// use launchpad_pro_rs::hal::{LaunchpadApp, Point, Rgb};
 /// use launchpad_pro_rs::hal::surface::{Pads, set_led, AftertouchEvent, ButtonEvent};
 /// use launchpad_pro_rs::launchpad_app;
-/// use launchpad_pro_rs::hal::midi::{Message, Port, CableEvent};
+/// use launchpad_pro_rs::hal::midi::{MidiMessage, Port, CableEvent};
 ///
 /// struct App; // define our app type
 ///
@@ -483,10 +478,9 @@ pub extern "C" fn app_midi_event(port: u8, status: u8, data1: u8, data2: u8) {
         };
 
         if let Some(port) = port {
-            listener.midi_event(port, midi::Message {
-                status,
-                data: (data1, data2),
-            });
+            let data = [status, data1, data2];
+            let msg = MidiMessage::try_from(data.as_ref()).unwrap();
+            listener.midi_event(port, msg);
         }
     }
 }
@@ -561,6 +555,7 @@ macro_rules! launchpad_app {
 #[cfg(test)]
 mod tests {
     use super::*;
+    //use wmidi::MidiMessage;
 
     #[test]
     fn can_construct_point() {
@@ -620,4 +615,5 @@ mod tests {
         assert_eq!(color.1, 31);
         assert_eq!(color.2, 15);
     }
+
 }

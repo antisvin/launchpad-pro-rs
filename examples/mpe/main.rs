@@ -2,22 +2,29 @@
 #![cfg_attr(target_arch="arm", no_main)]
 
 #[cfg(target_arch="arm")]
+
 use core::panic::PanicInfo;
 
-mod life;
+mod resources;
+mod diamond;
+mod mpe;
 
+use crate::mpe::VoiceManager;
+use crate::diamond::Diamond;
+use crate::hal::surface::*;
+use crate::hal::*;
 use launchpad_pro_rs::hal;
 use launchpad_pro_rs::hal::LaunchpadApp;
 use launchpad_pro_rs::launchpad_app;
-
-use life::Life;
 
 /// The Launchpad Pro app state.
 struct State {
     /// A flag to indicate whether the Game of Life simulation is running.
     is_running: bool,
-    /// Our Game of Life state.
-    life: Life,
+    /// JI diamond state
+    diamond: Diamond,
+    /// MPE voice manager
+    mpe: VoiceManager
 }
 
 impl State {
@@ -25,12 +32,14 @@ impl State {
     const fn new() -> Self {
         Self {
             is_running: false,
-            life: Life::new(),
+            diamond: Diamond::new(),
+            mpe: VoiceManager::new()
         }
     }
 
     /// Draw the Game of Life universe on the Launchpad Pro grid.
     fn draw_universe(&self) {
+        /*
         for point in hal::Grid::points() {
             hal::surface::set_led(
                 point,
@@ -40,17 +49,20 @@ impl State {
                 },
             );
         }
+        */
     }
 
     /// Move the simulation forward by one tick.
     fn tick(&mut self) {
-        self.life.tick();
+        //self.life.tick();
     }
 
     /// Toggle the state of the cell at the point on the grid.
-    fn toggle_cell(&mut self, point: hal::Point) {
+    fn toggle_cell(&mut self, _point: hal::Point) {
+        /*
         let toggled_state = !self.life.get(point);
         self.life.set(point, toggled_state);
+        */
     }
 
     fn is_running(&self) -> bool {
@@ -80,10 +92,41 @@ const FRAMES_PER_SECOND: i32 = 4;
 /// The number of timer ticks per frame. Timer ticks happen at a frequency of ~1ms.
 const TICKS_PER_FRAME: i32 = 1000 / FRAMES_PER_SECOND;
 
+#[derive(Clone, Copy)]
+pub enum Colour {
+    Black = 0x0f0f0f,
+    Red = 0xff0000,
+	Orange = 0xffa500,
+	Yellow = 0xffff00,
+	Green = 0x008000,
+	Blue = 0x0000ff,
+	Purple = 0x4b0082,
+	Magenta = 0xee82ee
+}
+
+use crate::Colour::*;
+
+pub const COLOURS: [Colour; 16] = [
+    Black, Black, Black, Red, Black, Orange, Black, Yellow, Black, Green,
+    Black, Blue, Black, Purple, Black, Magenta
+];
+
 /// Implement the LaunchpadApp trait for our app in order to be notified of events that occur on
 /// the Launchpad Pro hardware.
 impl LaunchpadApp for App {
     fn init_event(&self, _pads: hal::surface::Pads) {
+        //let mut state = self.state.lock();
+        //state.diamond.update_notes();
+        for i in 0..8 {
+            for j in 0..8 {
+                let tone = resources::TONES[i as usize][j as usize];
+                let col = COLOURS[tone.limit as usize] as u32;
+                let r: u8 = (col >> 16) as u8;
+                let g: u8 = ((col >> 8) & 0xff) as u8;
+                let b: u8 = (col & 0xff) as u8;
+                set_led(Point::new(1 + i as i8, 1 + j as i8), Rgb::new(r, g, b));
+            }
+        }
     }
 
     fn timer_event(&self) {
@@ -150,54 +193,6 @@ fn main() {}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    //use super::*;
 
-    #[test]
-    fn app_starts_paused_until_setup_button_is_pressed() {
-        // create our app
-        let app = App::new();
-
-        // we expect that our newly created app will start paused
-        assert_eq!(app.state.lock().is_running, false);
-
-        // create a single cell that will immediately die once the simulation starts
-        app.button_event(hal::surface::ButtonEvent {
-            button: hal::surface::Button::Pad(hal::Point::new(5, 5)),
-            event: hal::surface::Event::Release,
-        });
-
-        // expect that the cell we created is now alive
-        assert_eq!(
-            app.state.lock().life.get(hal::Point::new(5, 5)),
-            life::Cell::Alive
-        );
-
-        // call the timer until the simulation is progressed by one tick (if it was running...)
-        for _ in 0..TICKS_PER_FRAME {
-            app.timer_event();
-        }
-
-        // check that our cell is still alive
-        assert_eq!(
-            app.state.lock().life.get(hal::Point::new(5, 5)),
-            life::Cell::Alive
-        );
-
-        // press the setup button to unpause the simulation
-        app.button_event(hal::surface::ButtonEvent {
-            button: hal::surface::Button::Setup,
-            event: hal::surface::Event::Release,
-        });
-
-        // check that our button press was registered
-        assert_eq!(app.state.lock().is_running, true);
-
-        // call the timer until the simulation is progressed by one tick
-        for _ in 0..TICKS_PER_FRAME {
-            app.timer_event();
-        }
-
-        // now that the simulation as started we expect that our solitary cell has died
-        assert_eq!(app.state.lock().life.get(hal::Point::new(5, 5)), life::Cell::Dead);
-    }
 }
