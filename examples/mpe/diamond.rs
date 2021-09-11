@@ -1,6 +1,8 @@
 //use crate::hal::{Grid, Point};
 //use super::diamond::resources;
 use crate::resources::TONES;
+use super::COLOURS;
+use crate::hal::Rgb;
 
 // Number of tones in diamond row/column
 const DIAMOND_SIZE: usize = 8;
@@ -8,15 +10,26 @@ const DIAMOND_SIZE: usize = 8;
 /// Precomputed JI tone
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Tone {
-    pub limit: u8,
-    pub semitones: u8,
-    pub cents: u32
+    limit: u8,
+    semitones: u8,
+    cents: u32,
+    rgb: Rgb
 }
 
 impl Tone {
     /// Create new tone
     pub const fn new(limit: u8, semitones: u8, cents: u32) -> Self {
-        Tone {limit, semitones, cents}
+        let col = COLOURS[limit as usize] as u32;
+        let r: u8 = (col >> 16) as u8;
+        let g: u8 = ((col >> 8) & 0xff) as u8;
+        let b: u8 = (col & 0xff) as u8;
+        Tone {limit, semitones, cents, rgb: Rgb::new(r, g, b)}
+    }
+    pub const fn limit(&self) -> u8 {
+        self.limit
+    }
+    pub const fn rgb(&self) -> Rgb {
+        self.rgb
     }
 }
 

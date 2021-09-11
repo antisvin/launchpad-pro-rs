@@ -64,7 +64,7 @@ header = """use super::diamond::Tone;
 pub const TONES: [[Tone; 8]; 8] = [
 """
 
-tone = lambda t: f'Tone {{ limit: {t.limit}, semitones: {t.semitone()}, cents: {hex(t.bend())} }}'
+tone = lambda t: f'Tone::new({t.limit}, {t.semitone()}, {hex(t.bend())})'
 footer = '];\n'
 
 with open('examples/mpe/resources.rs', 'w') as out:

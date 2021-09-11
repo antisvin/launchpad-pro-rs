@@ -1,9 +1,12 @@
 use super::diamond::*;
+use crate::hal::Rgb;
+use crate::resources::TONES;
+
 
 const MAX_VOICES: usize = 14;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Voice {
+pub struct Voice {
     note: Note,
     row: u8,
     col: u8,
@@ -20,7 +23,7 @@ impl Voice {
         self.channel != 0 && !self.is_taken
     }
 
-    fn set_channel(&mut self, channel: u8) -> &mut Self {
+    pub fn set_channel(&mut self, channel: u8) -> &mut Self {
         self.channel = channel;
         self
     }
@@ -35,6 +38,9 @@ impl Voice {
     fn release(&mut self) -> &mut Self {
         self.is_taken = false;
         self
+    }
+    pub const fn rgb(&self) -> Rgb {
+        TONES[self.row as usize][self.col as usize].rgb()
     }
 }
 
@@ -68,6 +74,16 @@ impl VoiceManager {
         }
     }
 
+    pub fn get_voice(&self, index: u8) -> Option<&Voice>{
+        let index: usize = index.into();
+        if index < MAX_VOICES {
+            Some(&self.voices[index])
+        }
+        else {
+            None
+        }
+    }
+
     /// Take a new voice if available
     pub fn take(&mut self, row: u8, col: u8) -> Option<&Voice> {
         let mut channels = self.num_channels;
@@ -86,14 +102,14 @@ impl VoiceManager {
         None
     }
 
-    pub fn release(&mut self, row: u8, col: u8) -> bool {
+    pub fn release(&mut self, row: u8, col: u8) -> Option<&mut Voice> {
         for v in &mut self.voices.iter_mut() {
             if v.row == row && v.col == col {
                 v.release();
-                return true
+                return Some(v)
             }
-        }
-        false
+        };
+        None
     }
 }
 
@@ -143,13 +159,18 @@ mod tests {
     #[test]
     fn manager_take_two_voices() {
         let mut mpe = VoiceManager::new();
+        // Take first voice
         mpe.get_voice_mut(0).unwrap().set_channel(1);
         let &voice1 = mpe.take(1, 2).unwrap();
         assert_eq!(voice1, mpe.voices[0]);
-        assert_eq!(mpe.take(2, 3), None);
+        // Can't take second voice before it has a channel
+        assert_eq!(mpe.take(2, 3), None);        
+        // Take second voice
         mpe.get_voice_mut(1).unwrap().set_channel(2);
         let &voice2 = mpe.take(2, 3).unwrap();
         assert_eq!(voice2, mpe.voices[1]);
-        assert_ne!(voice1, voice2)
+        assert_ne!(voice1, voice2);
+        // Can't take another one
+        assert_eq!(mpe.take(3, 4), None)
     }
 }

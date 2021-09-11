@@ -9,10 +9,11 @@ mod resources;
 mod diamond;
 mod mpe;
 
-use crate::mpe::VoiceManager;
-use crate::diamond::Diamond;
 use crate::hal::surface::*;
 use crate::hal::*;
+use crate::mpe::VoiceManager;
+use crate::diamond::Diamond;
+use crate::resources::TONES;
 use launchpad_pro_rs::hal;
 use launchpad_pro_rs::hal::LaunchpadApp;
 use launchpad_pro_rs::launchpad_app;
@@ -119,13 +120,12 @@ impl LaunchpadApp for App {
         //state.diamond.update_notes();
         for i in 0..8 {
             for j in 0..8 {
-                let tone = resources::TONES[i as usize][j as usize];
-                let col = COLOURS[tone.limit as usize] as u32;
-                let r: u8 = (col >> 16) as u8;
-                let g: u8 = ((col >> 8) & 0xff) as u8;
-                let b: u8 = (col & 0xff) as u8;
-                set_led(Point::new(1 + i as i8, 1 + j as i8), Rgb::new(r, g, b));
+                set_led(Point::new(1 + i as i8, 1 + j as i8), TONES[i][j].rgb())
             }
+        }
+        let mut state = self.state.lock();
+        for i in 0..8 {
+            state.mpe.get_voice_mut(i).unwrap().set_channel(i + 1);
         }
     }
 
@@ -157,16 +157,43 @@ impl LaunchpadApp for App {
     }
 
     fn button_event(&self, button_event: hal::surface::ButtonEvent) {
-        if let hal::surface::Event::Release = button_event.event {
-            let mut state = self.state.lock();
-
-            match button_event.button {
-                hal::surface::Button::Pad(point) => {
-                    state.toggle_cell(point);
-                    state.draw_universe();
+        match button_event.event {
+            hal::surface::Event::Press(value) => {
+                match button_event.button {
+                    surface::Button::Setup => {
+                        // Setup pressed
+                    },
+                    surface::Button::Pad(point) => {
+                        if point.x() > 0 && point.x() <= 8 && point.y() > 0 && point.y() <= 8 {
+                            let mut state = self.state.lock();
+                            match state.mpe.take(point.x() as u8 - 1, point.y() as u8 - 1) {
+                                None => {},
+                                Some(&voice) => {
+                                    // Voice taken
+                                    set_led(point, Rgb::new(0xff, 0xff, 0xff))
+                                }
+                            }
+                        }
+                    }
                 }
-                hal::surface::Button::Setup => {
-                    state.toggle_is_running();
+            },
+            hal::surface::Event::Release => {
+                let mut state = self.state.lock();
+
+                match button_event.button {
+                    hal::surface::Button::Pad(point) => {
+                        if point.x() > 0 && point.x() <= 8 && point.y() > 0 && point.y() <= 8 {
+                            match state.mpe.release(point.x() as u8 - 1, point.y() as u8 - 1) {
+                                None => {},
+                                Some(&mut voice) => {
+                                    set_led(point, voice.rgb())
+                                }
+                            }
+                        }
+                    }
+                    hal::surface::Button::Setup => {
+                        state.toggle_is_running();
+                    }
                 }
             }
         }
