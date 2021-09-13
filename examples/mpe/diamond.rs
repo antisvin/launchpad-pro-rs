@@ -3,6 +3,7 @@
 use crate::resources::TONES;
 use super::COLOURS;
 use crate::hal::Rgb;
+use wmidi::Note as MidiNote;
 
 // Number of tones in diamond row/column
 const DIAMOND_SIZE: usize = 8;
@@ -36,18 +37,26 @@ impl Tone {
 /// Microtonal note for MIDI - can be changed at runtime
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Note {
-    number: u8,
+    midi_note: MidiNote,
     bend: u16
 }
 
 impl Note {
     /// New note
     pub const fn empty() -> Self {
-        Note {number: 0, bend: 0}
+        Note {midi_note: MidiNote::CMinus1, bend: 0}
     }
-    // New note with number/pitch bend assigned
-    pub const fn new(number: u8, bend: u16) -> Self {
-        Note {number, bend}
+    /// New note with number/pitch bend assigned
+    pub const fn new(midi_note: MidiNote, bend: u16) -> Self {
+        Note {midi_note, bend}
+    }
+    /// Current pitch bend value
+    pub const fn pitch_bend(&self) -> u16 {
+        self.bend
+    }
+    /// MIDI note
+    pub const fn midi_note(&self) -> MidiNote{
+        self.midi_note
     }
 }
 
@@ -67,13 +76,17 @@ impl Diamond {
             base_note: 24,
             pitch_bend_range: 1,
             notes: [[Note::empty(); DIAMOND_SIZE]; DIAMOND_SIZE]}
-        //d.update_notes();
     }
 
     /// Set base note (MIDI note number)
     fn set_base_note(&mut self, note: u8) {
         self.base_note = note;
         self.update_notes()
+    }
+
+    /// Get pitch bend range
+    pub const fn pitch_bend_range(&self) -> u8 {
+        self.pitch_bend_range
     }
 
     /// Set pitch bend range in semitones. The bigger the less precise.
@@ -87,19 +100,20 @@ impl Diamond {
         for i in 0..8 {
             for j in 0..8 {
                 let mut note = &mut self.notes[i][j];
-                note.number = self.base_note + TONES[i][j].semitones;
-                note.bend = (TONES[i][j].cents / ((self.pitch_bend_range as u32) << 19)) as u16 + 8192
+                note.midi_note = MidiNote::from_u8_lossy(
+                    self.base_note + TONES[i][j].semitones);
+                note.bend = (
+                    TONES[i][j].cents / ((self.pitch_bend_range as u32) << 19)) as u16 + 8192
             }
         }
     }
 
     /// Get note by row and column number
-    pub const fn get_note(&self, i: usize, j: usize) -> &Note{
-        return &self.notes[i][j]
+    pub const fn get_note(&self, row: usize, col: usize) -> Note{
+        return self.notes[row][col]
     }
 }
 
-//pub static mut DIAMOND: &Diamond = &Diamond::new();
 
 #[cfg(test)]
 mod tests {
@@ -125,28 +139,29 @@ mod tests {
         assert_eq!(d.base_note, 24 as u8);
         assert_eq!(d.pitch_bend_range, 1);
         // Initial notes check
-        assert_eq!(*d.get_note(0, 0), Note::new(24, 8192));
-        assert_eq!(*d.get_note(0, 1), Note::new(26, 8512));
-        assert_eq!(*d.get_note(0, 2), Note::new(27, 15262));
-        assert_eq!(*d.get_note(0, 4), Note::new(31, 8352));
+        assert_eq!(d.get_note(0, 0), Note::new(MidiNote::C1, 8192));
+        assert_eq!(d.get_note(0, 1), Note::new(MidiNote::D1, 8512));
+        assert_eq!(d.get_note(0, 2), Note::new(MidiNote::Eb1, 15262));
+        assert_eq!(d.get_note(0, 4), Note::new(MidiNote::G1, 8352));
         d.set_base_note(36);
         // Go up one octave - only semitones amount changes
-        assert_eq!(*d.get_note(0, 0), Note::new(36, 8192));
-        assert_eq!(*d.get_note(0, 1), Note::new(38, 8512));
-        assert_eq!(*d.get_note(0, 2), Note::new(39, 15262));
-        assert_eq!(*d.get_note(0, 4), Note::new(43, 8352));
+        assert_eq!(d.get_note(0, 0), Note::new(MidiNote::C2, 8192));
+        assert_eq!(d.get_note(0, 1), Note::new(MidiNote::D2, 8512));
+        assert_eq!(d.get_note(0, 2), Note::new(MidiNote::Eb2, 15262));
+        assert_eq!(d.get_note(0, 4), Note::new(MidiNote::G2, 8352));
 
         assert_eq!(d.get_note(0, 0).to_cents(1), 0.0);
         assert_eq!(d.get_note(0, 1).to_cents(1), 0.0390625);
         assert_eq!(d.get_note(0, 2).to_cents(1), 0.863037109375);
         assert_eq!(d.get_note(0, 4).to_cents(1), 0.01953125);
+        assert_eq!(d.get_note(0, 4).midi_note(), MidiNote::G2);
 
         // Larger bend range means that lower numbers are used for bend
         d.set_pitch_bend_range(48);
-        assert_eq!(*d.get_note(0, 0), Note::new(36, 8192));
-        assert_eq!(*d.get_note(0, 1), Note::new(38, 8198));
-        assert_eq!(*d.get_note(0, 2), Note::new(39, 8339));
-        assert_eq!(*d.get_note(0, 4), Note::new(43, 8195));
+        assert_eq!(d.get_note(0, 0), Note::new(MidiNote::C2, 8192));
+        assert_eq!(d.get_note(0, 1), Note::new(MidiNote::D2, 8198));
+        assert_eq!(d.get_note(0, 2), Note::new(MidiNote::Eb2, 8339));
+        assert_eq!(d.get_note(0, 4), Note::new(MidiNote::G2, 8195));
 
         // This results in some precision loss
         assert_eq!(d.get_note(0, 0).to_cents(48), 0.0);

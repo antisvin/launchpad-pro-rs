@@ -336,6 +336,7 @@ pub mod midi {
     pub use wmidi::MidiMessage;
 
     /// The MIDI ports available on the Launchpad Pro.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Port {
         Standalone = 0,
         USB = 1,
@@ -364,13 +365,19 @@ pub mod midi {
     ///
     /// let data = [0x90, 60, 127];
     /// let msg = MidiMessage::try_from(data.as_ref()).unwrap();    
-    /// send_message(Port::DIN, msg);
+    /// send_message(Port::DIN, &msg);
     /// ```
-    pub fn send_message(port: Port, message: MidiMessage) {
+    pub fn send_message(port: Port, message: &MidiMessage) {
         let mut data: [u8; 3] = [0; 3];
-        let _size = message.copy_to_slice(&mut data).unwrap();
-        unsafe {
-            super::hal_send_midi(port as u8, data[0], data[1], data[2])
+        match message.copy_to_slice(&mut data).unwrap() {
+            3 => unsafe {
+                super::hal_send_midi(port as u8, data[0], data[1], data[2])
+            },
+            2 => unsafe {
+                // Pad with "Reserved" message to fit in 3 bytes exactly
+                super::hal_send_midi(port as u8, data[0], data[1], 0xFD)
+            },
+            _ => ()
         }
     }
 

@@ -20,21 +20,24 @@ use launchpad_pro_rs::launchpad_app;
 
 /// The Launchpad Pro app state.
 struct State {
-    /// A flag to indicate whether the Game of Life simulation is running.
-    is_running: bool,
     /// JI diamond state
     diamond: Diamond,
     /// MPE voice manager
-    mpe: VoiceManager
+    mpe: VoiceManager,
+    pads: Option<Pads>,
+    init_delay: u8
 }
+
+const DEFAULT_INIT_DELAY: u8 = 100;
 
 impl State {
     /// Create the app.
     const fn new() -> Self {
         Self {
-            is_running: false,
             diamond: Diamond::new(),
-            mpe: VoiceManager::new()
+            mpe: VoiceManager::new(),
+            pads: None,
+            init_delay: DEFAULT_INIT_DELAY
         }
     }
 
@@ -55,7 +58,14 @@ impl State {
 
     /// Move the simulation forward by one tick.
     fn tick(&mut self) {
-        //self.life.tick();
+        match self.init_delay {
+            0 => (),
+            1 => {
+                self.mpe.init_mpe(self.diamond.pitch_bend_range());
+                self.init_delay = 0;
+            },
+            _ => self.init_delay -= 1
+        }
     }
 
     /// Toggle the state of the cell at the point on the grid.
@@ -66,13 +76,8 @@ impl State {
         */
     }
 
-    fn is_running(&self) -> bool {
-        self.is_running
-    }
-
-    /// Toggle whether the simulation is running.
-    fn toggle_is_running(&mut self) {
-        self.is_running = ! self.is_running;
+    fn schedule_init(&mut self) {
+        self.init_delay = DEFAULT_INIT_DELAY;
     }
 }
 
@@ -115,36 +120,24 @@ pub const COLOURS: [Colour; 16] = [
 /// Implement the LaunchpadApp trait for our app in order to be notified of events that occur on
 /// the Launchpad Pro hardware.
 impl LaunchpadApp for App {
-    fn init_event(&self, _pads: hal::surface::Pads) {
-        //let mut state = self.state.lock();
-        //state.diamond.update_notes();
+    fn init_event(&self, pads: hal::surface::Pads) {
         for i in 0..8 {
             for j in 0..8 {
                 set_led(Point::new(1 + i as i8, 1 + j as i8), TONES[i][j].rgb())
             }
         }
         let mut state = self.state.lock();
+        state.diamond.update_notes();
         for i in 0..8 {
             state.mpe.get_voice_mut(i).unwrap().set_channel(i + 1);
         }
+        state.pads = Some(pads)
     }
 
     fn timer_event(&self) {
-        /// A count of the number of timer callbacks.
-        static mut TICKS: i32 = 0;
-
-        unsafe {
-            if TICKS == TICKS_PER_FRAME {
-                let mut state = self.state.lock();
-                if state.is_running() {
-                    state.tick();
-                    state.draw_universe();
-                }
-                TICKS = 0;
-            } else {
-                TICKS += 1;
-            }
-        }
+        let mut state = self.state.lock();
+        state.tick();
+        //state.draw_universe();
     }
 
     fn midi_event(&self, _port: hal::midi::Port, _midi_event: hal::midi::MidiMessage) {
@@ -153,7 +146,11 @@ impl LaunchpadApp for App {
     fn sysex_event(&self, _port: hal::midi::Port, _data: &[u8]) {
     }
 
-    fn cable_event(&self, _cable_event: hal::midi::CableEvent) {
+    fn cable_event(&self, cable_event: hal::midi::CableEvent) {
+        if let hal::midi::CableEvent::Connect(_cable) = cable_event {
+            let mut state = self.state.lock();
+            state.schedule_init()
+        }
     }
 
     fn button_event(&self, button_event: hal::surface::ButtonEvent) {
@@ -164,14 +161,18 @@ impl LaunchpadApp for App {
                         // Setup pressed
                     },
                     surface::Button::Pad(point) => {
-                        if point.x() > 0 && point.x() <= 8 && point.y() > 0 && point.y() <= 8 {
+                        let row = point.x() as u8 - 1;
+                        let col = point.y() as u8 - 1;
+                        if row < 8 && col < 8 {
                             let mut state = self.state.lock();
-                            match state.mpe.take(point.x() as u8 - 1, point.y() as u8 - 1) {
-                                None => {},
-                                Some(&voice) => {
-                                    // Voice taken
-                                    set_led(point, Rgb::new(0xff, 0xff, 0xff))
-                                }
+                            let note = state.diamond.get_note(row as usize, col as usize);
+                            if let Some(voice) = &mut state.mpe.take(row, col) {
+                                use crate::midi::Port;
+                                use wmidi::{MidiMessage, ControlFunction, U7, Channel};
+                                // Voice taken
+                                set_led(point, Rgb::new(0xff, 0xff, 0xff));
+                                voice.set_note(note);
+                                voice.send_note_on(value);
                             }
                         }
                     }
@@ -186,13 +187,14 @@ impl LaunchpadApp for App {
                             match state.mpe.release(point.x() as u8 - 1, point.y() as u8 - 1) {
                                 None => {},
                                 Some(&mut voice) => {
-                                    set_led(point, voice.rgb())
+                                    set_led(point, voice.rgb());
+                                    voice.send_note_off(0 as u8);
                                 }
                             }
                         }
                     }
                     hal::surface::Button::Setup => {
-                        state.toggle_is_running();
+                        //state.toggle_is_running();
                     }
                 }
             }
@@ -201,6 +203,7 @@ impl LaunchpadApp for App {
 
     fn aftertouch_event(&self, _aftertouch_event: hal::surface::AftertouchEvent) {
     }
+
 }
 
 /// Create a static instance of our app.
