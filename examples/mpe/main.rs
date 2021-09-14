@@ -11,7 +11,7 @@ mod mpe;
 
 use crate::hal::surface::*;
 use crate::hal::*;
-use crate::mpe::VoiceManager;
+use crate::mpe::{VoiceManager, MAX_VOICES};
 use crate::diamond::Diamond;
 use crate::resources::TONES;
 use launchpad_pro_rs::hal;
@@ -128,8 +128,13 @@ impl LaunchpadApp for App {
         }
         let mut state = self.state.lock();
         state.diamond.update_notes();
-        for i in 0..8 {
-            state.mpe.get_voice_mut(i).unwrap().set_channel(i + 1);
+        let mut channels: [u8; MAX_VOICES] = [0; MAX_VOICES];
+        for i in 0..MAX_VOICES {
+            channels[i] = i as u8 + 1
+        }
+        state.mpe.fill_voices(&channels);
+        for i in 0..MAX_VOICES {
+            state.mpe.get_voice_mut(i as u8).unwrap().set_channel(i as u8 + 1);
         }
         state.pads = Some(pads)
     }
@@ -183,13 +188,12 @@ impl LaunchpadApp for App {
 
                 match button_event.button {
                     hal::surface::Button::Pad(point) => {
-                        if point.x() > 0 && point.x() <= 8 && point.y() > 0 && point.y() <= 8 {
-                            match state.mpe.release(point.x() as u8 - 1, point.y() as u8 - 1) {
-                                None => {},
-                                Some(&mut voice) => {
-                                    set_led(point, voice.rgb());
-                                    voice.send_note_off(0 as u8);
-                                }
+                        let row = point.x() as u8 - 1;
+                        let col = point.y() as u8 - 1;
+                        if row < 8 && col < 8 {
+                            if let Some(&mut voice) = state.mpe.release(row, col) {
+                                set_led(point, voice.rgb());
+                                voice.send_note_off(0 as u8);
                             }
                         }
                     }

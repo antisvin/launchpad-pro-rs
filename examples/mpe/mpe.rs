@@ -5,7 +5,8 @@ use crate::resources::TONES;
 use wmidi::{MidiMessage, ControlFunction, Channel, U7, U14};
 
 
-const MAX_VOICES: usize = 14;
+pub const MAX_VOICES: usize = 6;
+const MAX_VOICES_PLUS_ONE: usize = MAX_VOICES + 1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Voice {
@@ -18,7 +19,7 @@ pub struct Voice {
 
 impl Voice {
     const fn new() -> Self {
-        Voice { note: Note::empty(), row: 0, col: 0, channel: 0, is_taken: false }
+        Voice { note: Note::empty(), row: 0, col: 0, channel: 0, is_taken: false}
     }
 
     const fn can_take(&self) -> bool {
@@ -93,6 +94,7 @@ enum MPEZone {
 
 pub struct VoiceManager {
     voices: [Voice; MAX_VOICES],
+    voice_queue: heapless::spsc::Queue<usize, MAX_VOICES_PLUS_ONE>,
     num_channels: u8,
     zone: MPEZone,
     num_taken: u8
@@ -101,9 +103,21 @@ pub struct VoiceManager {
 impl VoiceManager {
     pub const fn new() -> Self {
         VoiceManager {
-            voices: [Voice::new(); MAX_VOICES], num_channels: MAX_VOICES as u8,
+            voices: [Voice::new(); MAX_VOICES],
+            voice_queue: heapless::spsc::Queue::new(),
+            num_channels: MAX_VOICES as u8,
             zone: MPEZone::Lower, num_taken: 0
         }
+    }
+
+    pub fn fill_voices(&mut self, channels: &[u8]) -> &mut Self {
+        for (i, channel) in channels.iter().enumerate() {
+            self.voices[i].channel = *channel;
+            if *channel > 0 {
+                self.voice_queue.enqueue(i as usize).unwrap();
+            }
+        };
+        self
     }
 
     pub fn get_voice_mut(&mut self, index: u8) -> Option<&mut Voice>{
@@ -128,26 +142,21 @@ impl VoiceManager {
 
     /// Take a new voice if available
     pub fn take(&mut self, row: u8, col: u8) -> Option<&mut Voice> {
-        let mut channels = self.num_channels;
-        for v in self.voices.iter_mut() {
-            if channels == 0 {
-                return None
+        match self.voice_queue.dequeue() {
+            Some(next_voice) => {
+                self.num_taken += 1;
+                Some(self.voices[next_voice].take(row, col))
             }
-            if v.can_take() {
-                v.take(row, col);
-                return Some(v)
-            }
-            else {
-                channels -= 1;
-            }
+            _ => None
         }
-        None
     }
 
     pub fn release(&mut self, row: u8, col: u8) -> Option<&mut Voice> {
-        for v in &mut self.voices.iter_mut() {
-            if v.row == row && v.col == col {
+        for (i, v) in &mut self.voices.iter_mut().enumerate() {
+            if v.row == row && v.col == col && v.is_taken {
                 v.release();
+                self.voice_queue.enqueue(i as usize).unwrap();
+                self.num_taken -= 1;
                 return Some(v)
             }
         };
@@ -274,20 +283,32 @@ mod tests {
     }
 
     #[test]
-    fn manager_take_two_voices() {
+    fn manager_take_voices() {
         let mut mpe = VoiceManager::new();
-        // Take first voice
         mpe.get_voice_mut(0).unwrap().set_channel(1);
-        let &mut voice1 = mpe.take(1, 2).unwrap();
-        assert_eq!(voice1, mpe.voices[0]);
-        // Can't take second voice before it has a channel
-        assert_eq!(mpe.take(2, 3), None);        
-        // Take second voice
         mpe.get_voice_mut(1).unwrap().set_channel(2);
+        mpe.fill_voices(&[1, 2]);
+        // Take first voice
+        assert_eq!(mpe.num_taken, 0);
+        let &mut voice1 = mpe.take(1, 2).unwrap();
+        assert_eq!(mpe.num_taken, 1);
+        assert_eq!(voice1, mpe.voices[0]);
+        assert_eq!(voice1.channel, 1);
+        // Take second voice
         let &mut voice2 = mpe.take(2, 3).unwrap();
+        assert_eq!(mpe.num_taken, 2);
         assert_eq!(voice2, mpe.voices[1]);
         assert_ne!(voice1, voice2);
+        assert_eq!(voice2.channel, 2);
         // Can't take another one
-        assert_eq!(mpe.take(3, 4), None)
+        assert_eq!(mpe.take(3, 4), None);
+        // Release voice 2
+        assert_eq!(mpe.release(1, 2).unwrap().channel, 1);
+        assert_eq!(mpe.release(2, 3).unwrap().channel, 2);
+        // Take voice 3
+        assert_eq!(mpe.num_taken, 0);
+        let &mut voice3 = mpe.take(5, 6).unwrap();
+        assert_eq!(mpe.num_taken, 1);
+        assert_eq!(voice3.channel, 1);
     }
 }

@@ -260,11 +260,8 @@ pub mod surface {
         /// Read a 12-bit value from a pad at a given point on the grid. If there isn't a pad at the
         /// point provided then this function will return None.
         pub fn read(&self, pos: Point) -> Option<u16> {
-            if let Some(offset) = Self::point_to_offset(pos) {
-                Some(unsafe { *self.adc.offset(offset as isize) })
-            } else {
-                None
-            }
+            Self::point_to_offset(pos).map(
+                |offset| unsafe { *self.adc.add(offset) })
         }
 
         /// For technical reasons the offsets from the ADC pointer use a slightly odd scheme.

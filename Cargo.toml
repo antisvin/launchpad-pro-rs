@@ -12,3 +12,4 @@ spin = "0.5.2"
 #midi-msg = { version = "0.4", default-features = false, features=["sysex"] , git = "https://github.com/AlexCharlton/midi-msg.git", rev = "1b160db0f915c06f2cbc27c5f054d9fd4fa98312" }
 #embedded_midi = { version = "0.1.1" }
 wmidi = { version = "4.0.6", default-features = false }
+heapless = { version = "0.7.5" }
