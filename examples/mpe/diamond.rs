@@ -1,8 +1,8 @@
 //use crate::hal::{Grid, Point};
 //use super::diamond::resources;
-use crate::resources::TONES;
 use super::COLOURS;
 use crate::hal::Rgb;
+use crate::resources::TONES;
 use wmidi::Note as MidiNote;
 
 // Number of tones in diamond row/column
@@ -14,7 +14,7 @@ pub struct Tone {
     limit: u8,
     semitones: u8,
     cents: u32,
-    rgb: Rgb
+    rgb: Rgb,
 }
 
 impl Tone {
@@ -24,7 +24,12 @@ impl Tone {
         let r: u8 = (col >> 16) as u8;
         let g: u8 = ((col >> 8) & 0xff) as u8;
         let b: u8 = (col & 0xff) as u8;
-        Tone {limit, semitones, cents, rgb: Rgb::new(r, g, b)}
+        Tone {
+            limit,
+            semitones,
+            cents,
+            rgb: Rgb::new(r, g, b),
+        }
     }
     pub const fn limit(&self) -> u8 {
         self.limit
@@ -38,24 +43,27 @@ impl Tone {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Note {
     midi_note: MidiNote,
-    bend: u16
+    bend: u16,
 }
 
 impl Note {
     /// New note
     pub const fn empty() -> Self {
-        Note {midi_note: MidiNote::CMinus1, bend: 0}
+        Note {
+            midi_note: MidiNote::CMinus1,
+            bend: 0,
+        }
     }
     /// New note with number/pitch bend assigned
     pub const fn new(midi_note: MidiNote, bend: u16) -> Self {
-        Note {midi_note, bend}
+        Note { midi_note, bend }
     }
     /// Current pitch bend value
     pub const fn pitch_bend(&self) -> u16 {
         self.bend
     }
     /// MIDI note
-    pub const fn midi_note(&self) -> MidiNote{
+    pub const fn midi_note(&self) -> MidiNote {
         self.midi_note
     }
 }
@@ -66,7 +74,7 @@ type NotesGrid = [[Note; DIAMOND_SIZE]; DIAMOND_SIZE];
 pub struct Diamond {
     base_note: u8,
     pitch_bend_range: u8,
-    notes: NotesGrid
+    notes: NotesGrid,
 }
 
 impl Diamond {
@@ -75,7 +83,8 @@ impl Diamond {
         Diamond {
             base_note: 24,
             pitch_bend_range: 1,
-            notes: [[Note::empty(); DIAMOND_SIZE]; DIAMOND_SIZE]}
+            notes: [[Note::empty(); DIAMOND_SIZE]; DIAMOND_SIZE],
+        }
     }
 
     /// Set base note (MIDI note number)
@@ -100,25 +109,23 @@ impl Diamond {
         for i in 0..8 {
             for j in 0..8 {
                 let mut note = &mut self.notes[i][j];
-                note.midi_note = MidiNote::from_u8_lossy(
-                    self.base_note + TONES[i][j].semitones);
-                note.bend = (
-                    TONES[i][j].cents / ((self.pitch_bend_range as u32) << 19)) as u16 + 8192
+                note.midi_note = MidiNote::from_u8_lossy(self.base_note + TONES[i][j].semitones);
+                note.bend =
+                    (TONES[i][j].cents / ((self.pitch_bend_range as u32) << 19)) as u16 + 8192
             }
         }
     }
 
     /// Get note by row and column number
-    pub const fn get_note(&self, row: usize, col: usize) -> Note{
-        return self.notes[row][col]
+    pub const fn get_note(&self, row: usize, col: usize) -> Note {
+        return self.notes[row][col];
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::resources::TONES;
     use crate::diamond::*;
+    use crate::resources::TONES;
 
     #[test]
     fn test_tone_semitones() {

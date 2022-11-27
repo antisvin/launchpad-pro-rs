@@ -1,9 +1,8 @@
 use super::diamond::*;
-use crate::hal::Rgb;
 use crate::hal::midi;
+use crate::hal::Rgb;
 use crate::resources::TONES;
-use wmidi::{MidiMessage, ControlFunction, Channel, U7, U14};
-
+use wmidi::{Channel, ControlFunction, MidiMessage, U14, U7};
 
 pub const MAX_VOICES: usize = 6;
 const MAX_VOICES_PLUS_ONE: usize = MAX_VOICES + 1;
@@ -14,12 +13,18 @@ pub struct Voice {
     row: u8,
     col: u8,
     channel: u8, // Channel 0 == disabled
-    is_taken: bool
+    is_taken: bool,
 }
 
 impl Voice {
     const fn new() -> Self {
-        Voice { note: Note::empty(), row: 0, col: 0, channel: 0, is_taken: false}
+        Voice {
+            note: Note::empty(),
+            row: 0,
+            col: 0,
+            channel: 0,
+            is_taken: false,
+        }
     }
 
     const fn can_take(&self) -> bool {
@@ -60,20 +65,22 @@ impl Voice {
             _ => Some(MidiMessage::ControlChange(
                 Channel::from_index(self.channel).unwrap(),
                 ControlFunction::NON_REGISTERED_PARAMETER_NUMBER_MSB,
-                U7::try_from(pitch_bend_range).unwrap()))
+                U7::try_from(pitch_bend_range).unwrap(),
+            )),
         }
     }
 
     pub fn send_note_on(&self, velocity: u8) {
         let channel = Channel::from_index(self.channel).unwrap();
         let messages = [
-            MidiMessage::PitchBendChange(
-                channel, U14::try_from(self.note.pitch_bend()).unwrap()),
+            MidiMessage::PitchBendChange(channel, U14::try_from(self.note.pitch_bend()).unwrap()),
             //MidiMessage::ChannelPressure(
             //    channel, U7::try_from(velocity).unwrap()),
             MidiMessage::NoteOn(
-                channel, self.note.midi_note(),
-                U7::try_from(velocity).unwrap())
+                channel,
+                self.note.midi_note(),
+                U7::try_from(velocity).unwrap(),
+            ),
         ];
         VoiceManager::send_messages(&messages)
     }
@@ -81,15 +88,17 @@ impl Voice {
     pub fn send_note_off(&self, velocity: u8) {
         let channel = Channel::from_index(self.channel).unwrap();
         let message = MidiMessage::NoteOff(
-            channel, self.note.midi_note(),
-            U7::try_from(velocity).unwrap());
+            channel,
+            self.note.midi_note(),
+            U7::try_from(velocity).unwrap(),
+        );
         VoiceManager::send_message(&message)
     }
 }
 
 enum MPEZone {
     Lower,
-    Upper
+    Upper,
 }
 
 pub struct VoiceManager {
@@ -97,7 +106,7 @@ pub struct VoiceManager {
     voice_queue: heapless::spsc::Queue<usize, MAX_VOICES_PLUS_ONE>,
     num_channels: u8,
     zone: MPEZone,
-    num_taken: u8
+    num_taken: u8,
 }
 
 impl VoiceManager {
@@ -106,7 +115,8 @@ impl VoiceManager {
             voices: [Voice::new(); MAX_VOICES],
             voice_queue: heapless::spsc::Queue::new(),
             num_channels: MAX_VOICES as u8,
-            zone: MPEZone::Lower, num_taken: 0
+            zone: MPEZone::Lower,
+            num_taken: 0,
         }
     }
 
@@ -116,26 +126,24 @@ impl VoiceManager {
             if *channel > 0 {
                 self.voice_queue.enqueue(i as usize).unwrap();
             }
-        };
+        }
         self
     }
 
-    pub fn get_voice_mut(&mut self, index: u8) -> Option<&mut Voice>{
+    pub fn get_voice_mut(&mut self, index: u8) -> Option<&mut Voice> {
         let index: usize = index.into();
         if index < MAX_VOICES {
             Some(&mut self.voices[index])
-        }
-        else {
+        } else {
             None
         }
     }
 
-    pub fn get_voice(&self, index: u8) -> Option<&Voice>{
+    pub fn get_voice(&self, index: u8) -> Option<&Voice> {
         let index: usize = index.into();
         if index < MAX_VOICES {
             Some(&self.voices[index])
-        }
-        else {
+        } else {
             None
         }
     }
@@ -147,7 +155,7 @@ impl VoiceManager {
                 self.num_taken += 1;
                 Some(self.voices[next_voice].take(row, col))
             }
-            _ => None
+            _ => None,
         }
     }
 
@@ -157,9 +165,9 @@ impl VoiceManager {
                 v.release();
                 self.voice_queue.enqueue(i as usize).unwrap();
                 self.num_taken -= 1;
-                return Some(v)
+                return Some(v);
             }
-        };
+        }
         None
     }
 
@@ -167,41 +175,48 @@ impl VoiceManager {
     pub fn mcm_messages(&self) -> [MidiMessage; 3] {
         let channel = match self.zone {
             MPEZone::Lower => Channel::Ch1,
-            MPEZone::Upper => Channel::Ch16
+            MPEZone::Upper => Channel::Ch16,
         };
         [
             MidiMessage::ControlChange(
-                channel, ControlFunction::REGISTERED_PARAMETER_NUMBER_LSB,
-                U7::try_from(6).unwrap()
+                channel,
+                ControlFunction::REGISTERED_PARAMETER_NUMBER_LSB,
+                U7::try_from(6).unwrap(),
             ),
             MidiMessage::ControlChange(
-                channel, ControlFunction::REGISTERED_PARAMETER_NUMBER_MSB,
-                U7::try_from(0).unwrap()
+                channel,
+                ControlFunction::REGISTERED_PARAMETER_NUMBER_MSB,
+                U7::try_from(0).unwrap(),
             ),
             MidiMessage::ControlChange(
-                channel, ControlFunction::DATA_ENTRY_MSB,
-                U7::try_from(self.num_channels).unwrap()
-            )
+                channel,
+                ControlFunction::DATA_ENTRY_MSB,
+                U7::try_from(self.num_channels).unwrap(),
+            ),
         ]
     }
 
     pub fn mono_mode_message(&self) -> MidiMessage {
         let channel = match self.zone {
             MPEZone::Lower => Channel::Ch1,
-            MPEZone::Upper => Channel::Ch16
+            MPEZone::Upper => Channel::Ch16,
         };
         MidiMessage::ControlChange(
-            channel, ControlFunction::POLY_OPERATION, U7::try_from(1).unwrap()
+            channel,
+            ControlFunction::POLY_OPERATION,
+            U7::try_from(1).unwrap(),
         )
     }
 
     pub fn poly_mode_message(&self) -> MidiMessage {
         let channel = match self.zone {
             MPEZone::Lower => Channel::Ch1,
-            MPEZone::Upper => Channel::Ch16
+            MPEZone::Upper => Channel::Ch16,
         };
         MidiMessage::ControlChange(
-            channel, ControlFunction::MONO_OPERATION, U7::try_from(1).unwrap()
+            channel,
+            ControlFunction::MONO_OPERATION,
+            U7::try_from(1).unwrap(),
         )
     }
 
@@ -210,11 +225,12 @@ impl VoiceManager {
     pub fn pitch_bend_range_message(&self, pitch_bend_range: u8) -> MidiMessage {
         let channel = match self.zone {
             MPEZone::Lower => Channel::Ch1,
-            MPEZone::Upper => Channel::Ch16
+            MPEZone::Upper => Channel::Ch16,
         };
         MidiMessage::ControlChange(
-            channel, ControlFunction::NON_REGISTERED_PARAMETER_NUMBER_MSB,
-            U7::try_from(pitch_bend_range).unwrap()
+            channel,
+            ControlFunction::NON_REGISTERED_PARAMETER_NUMBER_MSB,
+            U7::try_from(pitch_bend_range).unwrap(),
         )
     }
 

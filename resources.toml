@@ -14,7 +14,8 @@ class Tone(object):
         self.gcd = math.gcd(mul, div)
         self.mul = int(mul / self.gcd)
         self.div = int(div / self.gcd)
-        self.cents = math.log(k / l, 2) * 1200
+        self.label = f'{self.mul: >2}/{self.div: <2}'
+        self.cents = math.log(mul / div, 2) * 1200
         self.limit = max(self.largest_limit(self.mul), self.largest_limit(self.div))
 
     def semitone(self):
@@ -59,16 +60,19 @@ for i in range(8, 16):
         r.append(Tone(k, l))
     rows.append(r)
 
-header = """use super::diamond::Tone;
-
-pub const TONES: [[Tone; 8]; 8] = [
-"""
+header1 = "use super::diamond::Tone;\n\n"
+header2 = "pub const TONES: [[Tone; 8]; 8] = [\n"
 
 tone = lambda t: f'Tone::new({t.limit}, {t.semitone()}, {hex(t.bend())})'
 footer = '];\n'
 
 with open('examples/mpe/resources.rs', 'w') as out:
-    out.write(header)
+    out.write(header1)
+    for i, row in enumerate(rows):
+        row_str = ' '.join(t.label for t in row)
+        out.write(f'/// {row_str}\n')
+    out.write(header2)
+
     for i, row in enumerate(rows):
         row_str = ', '.join(tone(t) for t in row)
         out.write(f'    [{row_str}],\n' if i < len(rows) - 1 else f'    [{row_str}]\n')

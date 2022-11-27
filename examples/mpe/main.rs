@@ -1,18 +1,17 @@
-#![cfg_attr(target_arch="arm", no_std)]
-#![cfg_attr(target_arch="arm", no_main)]
+#![cfg_attr(target_arch = "arm", no_std)]
+#![cfg_attr(target_arch = "arm", no_main)]
 
-#[cfg(target_arch="arm")]
-
+#[cfg(target_arch = "arm")]
 use core::panic::PanicInfo;
 
-mod resources;
 mod diamond;
 mod mpe;
+mod resources;
 
+use crate::diamond::Diamond;
 use crate::hal::surface::*;
 use crate::hal::*;
 use crate::mpe::{VoiceManager, MAX_VOICES};
-use crate::diamond::Diamond;
 use crate::resources::TONES;
 use launchpad_pro_rs::hal;
 use launchpad_pro_rs::hal::LaunchpadApp;
@@ -25,7 +24,7 @@ struct State {
     /// MPE voice manager
     mpe: VoiceManager,
     pads: Option<Pads>,
-    init_delay: u8
+    init_delay: u8,
 }
 
 const DEFAULT_INIT_DELAY: u8 = 100;
@@ -37,7 +36,7 @@ impl State {
             diamond: Diamond::new(),
             mpe: VoiceManager::new(),
             pads: None,
-            init_delay: DEFAULT_INIT_DELAY
+            init_delay: DEFAULT_INIT_DELAY,
         }
     }
 
@@ -63,8 +62,8 @@ impl State {
             1 => {
                 self.mpe.init_mpe(self.diamond.pitch_bend_range());
                 self.init_delay = 0;
-            },
-            _ => self.init_delay -= 1
+            }
+            _ => self.init_delay -= 1,
         }
     }
 
@@ -82,13 +81,13 @@ impl State {
 }
 
 struct App {
-    state: hal::Mutex<State>
+    state: hal::Mutex<State>,
 }
 
 impl App {
     const fn new() -> Self {
         Self {
-            state: hal::Mutex::new(State::new())
+            state: hal::Mutex::new(State::new()),
         }
     }
 }
@@ -102,19 +101,19 @@ const TICKS_PER_FRAME: i32 = 1000 / FRAMES_PER_SECOND;
 pub enum Colour {
     Black = 0x0f0f0f,
     Red = 0xff0000,
-	Orange = 0xffa500,
-	Yellow = 0xffff00,
-	Green = 0x008000,
-	Blue = 0x0000ff,
-	Purple = 0x4b0082,
-	Magenta = 0xee82ee
+    Orange = 0xffa500,
+    Yellow = 0xffff00,
+    Green = 0x008000,
+    Blue = 0x0000ff,
+    Purple = 0x4b0082,
+    Magenta = 0xee82ee,
 }
 
 use crate::Colour::*;
 
 pub const COLOURS: [Colour; 16] = [
-    Black, Black, Black, Red, Black, Orange, Black, Yellow, Black, Green,
-    Black, Blue, Black, Purple, Black, Magenta
+    Black, Black, Black, Red, Black, Orange, Black, Yellow, Black, Green, Black, Blue, Black,
+    Purple, Black, Magenta,
 ];
 
 /// Implement the LaunchpadApp trait for our app in order to be notified of events that occur on
@@ -134,7 +133,11 @@ impl LaunchpadApp for App {
         }
         state.mpe.fill_voices(&channels);
         for i in 0..MAX_VOICES {
-            state.mpe.get_voice_mut(i as u8).unwrap().set_channel(i as u8 + 1);
+            state
+                .mpe
+                .get_voice_mut(i as u8)
+                .unwrap()
+                .set_channel(i as u8 + 1);
         }
         state.pads = Some(pads)
     }
@@ -145,11 +148,9 @@ impl LaunchpadApp for App {
         //state.draw_universe();
     }
 
-    fn midi_event(&self, _port: hal::midi::Port, _midi_event: hal::midi::MidiMessage) {
-    }
+    fn midi_event(&self, _port: hal::midi::Port, _midi_event: hal::midi::MidiMessage) {}
 
-    fn sysex_event(&self, _port: hal::midi::Port, _data: &[u8]) {
-    }
+    fn sysex_event(&self, _port: hal::midi::Port, _data: &[u8]) {}
 
     fn cable_event(&self, cable_event: hal::midi::CableEvent) {
         if let hal::midi::CableEvent::Connect(_cable) = cable_event {
@@ -164,7 +165,7 @@ impl LaunchpadApp for App {
                 match button_event.button {
                     surface::Button::Setup => {
                         // Setup pressed
-                    },
+                    }
                     surface::Button::Pad(point) => {
                         let row = point.x() as u8 - 1;
                         let col = point.y() as u8 - 1;
@@ -173,7 +174,7 @@ impl LaunchpadApp for App {
                             let note = state.diamond.get_note(row as usize, col as usize);
                             if let Some(voice) = &mut state.mpe.take(row, col) {
                                 use crate::midi::Port;
-                                use wmidi::{MidiMessage, ControlFunction, U7, Channel};
+                                use wmidi::{Channel, ControlFunction, MidiMessage, U7};
                                 // Voice taken
                                 set_led(point, Rgb::new(0xff, 0xff, 0xff));
                                 voice.set_note(note);
@@ -182,7 +183,7 @@ impl LaunchpadApp for App {
                         }
                     }
                 }
-            },
+            }
             hal::surface::Event::Release => {
                 let mut state = self.state.lock();
 
@@ -205,9 +206,7 @@ impl LaunchpadApp for App {
         }
     }
 
-    fn aftertouch_event(&self, _aftertouch_event: hal::surface::AftertouchEvent) {
-    }
-
+    fn aftertouch_event(&self, _aftertouch_event: hal::surface::AftertouchEvent) {}
 }
 
 /// Create a static instance of our app.
@@ -216,17 +215,16 @@ static APP: App = App::new();
 // Register our app to receive events from the hardware.
 launchpad_app!(APP);
 
-#[cfg(target_arch="arm")]
+#[cfg(target_arch = "arm")]
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     loop {}
 }
 
-#[cfg(not(target_arch="arm"))]
+#[cfg(not(target_arch = "arm"))]
 fn main() {}
 
 #[cfg(test)]
 mod tests {
     //use super::*;
-
 }
